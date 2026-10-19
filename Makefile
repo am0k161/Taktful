@@ -18,7 +18,7 @@ endif
 
 SRC = src/wav_io.cpp src/dsp.cpp src/fft.cpp src/onset.cpp \
       src/tempo.cpp src/chroma.cpp src/key.cpp src/api.cpp \
-      src/stream.cpp src/c_api.cpp
+      src/stream.cpp src/c_api.cpp src/notes.cpp
 OBJ = $(SRC:.cpp=.o)
 
 .PHONY: all lib cli tests clean
@@ -33,7 +33,7 @@ libtaktful.a: $(OBJ)
 src/%.o: src/%.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
 
-cli: lib taktful analyze_wav bpm_probe key_probe run_benchmark
+cli: lib taktful analyze_wav bpm_probe key_probe notes_probe run_benchmark
 
 taktful: cli/taktful.cpp libtaktful.a
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -Icli $< -o $@ libtaktful.a $(LDFLAGS)
@@ -45,6 +45,9 @@ bpm_probe: cli/bpm_probe.cpp libtaktful.a
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -Icli $< -o $@ libtaktful.a $(LDFLAGS)
 
 key_probe: cli/key_probe.cpp libtaktful.a
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -Icli $< -o $@ libtaktful.a $(LDFLAGS)
+
+notes_probe: cli/notes_probe.cpp libtaktful.a
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -Icli $< -o $@ libtaktful.a $(LDFLAGS)
 
 run_benchmark: cli/run_benchmark.cpp libtaktful.a
@@ -61,4 +64,4 @@ taktful_integration_tests: tests/integration/test_integration.cpp libtaktful.a
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -Ithird_party -Itests/unit -Itests/integration $< -o $@ libtaktful.a $(LDFLAGS)
 
 clean:
-	rm -f $(OBJ) libtaktful.a taktful analyze_wav bpm_probe key_probe run_benchmark taktful_unit_tests taktful_integration_tests
+	rm -f $(OBJ) libtaktful.a taktful analyze_wav bpm_probe key_probe notes_probe run_benchmark taktful_unit_tests taktful_integration_tests

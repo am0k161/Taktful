@@ -2,6 +2,7 @@
 
 #include <taktful/api.h>
 #include <taktful/dsp.h>
+#include <taktful/notes.h>
 #include <taktful/wav_io.h>
 
 #include <chrono>
@@ -32,6 +33,8 @@ static void usage() {
         "  --fast                  Fast mode (no DP, no whitening).\n"
         "  --profiles <name>       Key profiles: krumhansl | temperley1999 | temperley2007\n"
         "  --alternatives <N>      Number of alternative keys to print. Default 5.\n"
+        "  --notes                 Include note detection in output.\n"
+        "  --notes-threshold <V>   Minimum note presence threshold (0.0-1.0). Default 0.05.\n"
         "  --stats                 Print memory + CPU stats at the end.\n"
         "  --verbose               Print every intermediate stage to stderr.\n"
         "  --help                  Show this help.\n");
@@ -41,6 +44,8 @@ int main(int argc, char** argv) {
     bool as_json = true;
     bool stats = false;
     bool verbose = false;
+    bool include_notes = false;
+    float notes_threshold = 0.05f;
     Params params;
     const char* path = 0;
 
@@ -77,6 +82,10 @@ int main(int argc, char** argv) {
                 return 64;
             }
             params.num_alternatives = static_cast<uint8_t>(n);
+        } else if (std::strcmp(a, "--notes") == 0) {
+            include_notes = true;
+        } else if (std::strcmp(a, "--notes-threshold") == 0 && i + 1 < argc) {
+            notes_threshold = static_cast<float>(std::atof(argv[++i]));
         } else if (a[0] == '-') {
             std::fprintf(stderr, "unknown option: %s\n", a);
             usage();
@@ -109,6 +118,12 @@ int main(int argc, char** argv) {
     AnalysisResult r = analyze(wav, params);
     const auto t1 = std::chrono::steady_clock::now();
     const double cpu_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+
+    // Detect notes if requested
+    NotesResult notes_result;
+    if (include_notes) {
+        notes_result = detect_notes(wav, params);
+    }
 
     const double duration = (wav.sample_rate > 0)
         ? static_cast<double>(wav.samples.size()) / static_cast<double>(wav.sample_rate)
@@ -167,6 +182,30 @@ int main(int argc, char** argv) {
         }
         std::printf("    ]\n");
         std::printf("  }");
+        if (include_notes) {
+            std::printf(",\n  \"notes\": {\n");
+            std::printf("    \"total_energy\": %.4f,\n", static_cast<double>(notes_result.total_energy));
+            std::printf("    \"dominant_note\": \"%s\",\n",
+                        notes_result.dominant_pc >= 0 ? pitch_class_to_string(static_cast<PitchClass>(notes_result.dominant_pc)) : "none");
+            std::printf("    \"dominant_presence\": %.4f,\n", static_cast<double>(notes_result.dominant_presence));
+            std::printf("    \"notes\": [\n");
+            bool first_note = true;
+            for (const NoteInfo& note : notes_result.notes) {
+                if (note.presence < notes_threshold) {
+                    continue;
+                }
+                if (!first_note) {
+                    std::printf(",\n");
+                }
+                first_note = false;
+                std::printf("      {\"note\": \"%s\", \"presence\": %.4f, \"confidence\": %.4f}",
+                            pitch_class_to_string(note.pitch_class),
+                            static_cast<double>(note.presence),
+                            static_cast<double>(note.confidence));
+            }
+            std::printf("\n    ]\n");
+            std::printf("  }");
+        }
         if (stats) {
             std::printf(",\n  \"stats\": {\n");
             std::printf("    \"peak_heap_kb\": %.0f,\n", peak_kb);
@@ -192,6 +231,18 @@ int main(int argc, char** argv) {
                             i + 1,
                             to_string(r.key.alternatives[i].key),
                             static_cast<double>(r.key.alternatives[i].confidence));
+            }
+        }
+        if (include_notes) {
+            std::printf("\nNotes (presence >= %.2f):\n", static_cast<double>(notes_threshold));
+            for (const NoteInfo& note : notes_result.notes) {
+                if (note.presence < notes_threshold) {
+                    continue;
+                }
+                std::printf("  %-6s presence: %6.2f%%  confidence: %.2f\n",
+                            pitch_class_to_note_name(note.pitch_class),
+                            static_cast<double>(note.presence) * 100.0,
+                            static_cast<double>(note.confidence));
             }
         }
         if (stats) {

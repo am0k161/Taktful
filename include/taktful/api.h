@@ -92,4 +92,6 @@ bool validate_params(Params& params);
 
 } // namespace taktful
 
+#include <taktful/notes.h>
+
 #endif
